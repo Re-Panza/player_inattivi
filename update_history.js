@@ -1,13 +1,11 @@
 const fs = require('fs');
 
-// Leggiamo il file passato dal workflow (es: data_327.json o data_337.json)
-const inputFile = process.argv[2]; 
-const FILE_DB = 'db_storico.json';
+const inputFile = process.argv[2]; // Prende data_327.json o data_337.json
+if (!inputFile) process.exit(1);
 
-if (!inputFile || !fs.existsSync(inputFile)) {
-    console.log("Utilizzo: node update_history.js [nome_file.json]");
-    process.exit(1);
-}
+// Estrae il numero del mondo (es. 327) e crea il nome del database (es. db_327.json)
+const mondoNum = inputFile.match(/\d+/)[0];
+const FILE_DB = `db_${mondoNum}.json`;
 
 try {
     const scanData = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
@@ -15,22 +13,18 @@ try {
     const now = new Date().toISOString();
 
     scanData.forEach(p => {
-        // Creiamo una chiave unica che includa il mondo per evitare sovrapposizioni di ID
-        // Se il file è data_337.json, il prefisso sarà "337_"
-        const mondoPrefix = inputFile.match(/\d+/)[0];
-        const uniqueId = `${mondoPrefix}_${p.id}`;
-        
+        const id = p.id;
         const current = { pts: p.points || 0, cst: p.castles ? p.castles.length : 0 };
 
-        if (!db[uniqueId]) {
-            db[uniqueId] = { nome: p.name, ultima_modifica: now, dati: current, mondo: mondoPrefix };
-        } else if (db[uniqueId].dati.pts !== current.pts || db[uniqueId].dati.cst !== current.cst) {
-            db[uniqueId].ultima_modifica = now;
-            db[uniqueId].dati = current;
-            db[uniqueId].nome = p.name;
+        if (!db[id]) {
+            db[id] = { nome: p.name, ultima_modifica: now, dati: current };
+        } else if (db[id].dati.pts !== current.pts || db[id].dati.cst !== current.cst) {
+            db[id].ultima_modifica = now;
+            db[id].dati = current;
+            db[id].nome = p.name;
         }
     });
 
     fs.writeFileSync(FILE_DB, JSON.stringify(db, null, 2));
-    console.log(`Storico aggiornato per il file: ${inputFile}`);
+    console.log(`Aggiornato database specifico: ${FILE_DB}`);
 } catch (e) { console.log("Errore:", e); }
