@@ -199,24 +199,26 @@ l+k://player?605&327)..."></textarea>
         const win = document.getElementById('ai-window');
         win.style.display = win.style.display === 'block' ? 'none' : 'block';
     }
-
-    async function checkActivity() {
+async function checkActivity() {
         const input = document.getElementById('player-input').value;
         const resArea = document.getElementById('risultati');
 
+        // Regex per estrarre ID e Mondo dal link (gestisce entrambi i formati L&K)
+        const linkMatch = input.match(/l\+k:\/\/player\?(\d+)(?:&|&world_id=)(\d+)/) || 
+                          input.match(/l\+k:\/\/player\?id=(\d+)&world_id=(\d+)/);
+        
         const nameMatch = input.match(/(?:Nome|Giocatore|Nome giocatore):\s*(.+?)(?:\n|$)/i);
-        const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)/);
-        const worldMatch = input.match(/world_id=(\d+)/) || input.match(/\?(\d+)/) || input.match(/&(\d+)/);
 
-        if (!nameMatch || !idMatch) {
-            alert("❌ Errore! Formato profilo non riconosciuto. Assicurati di copiare tutto il testo del profilo.");
+        if (!linkMatch) {
+            alert("❌ Link non riconosciuto! Incolla il profilo che contiene l+k://player?...");
             return;
         }
 
-        const pName = nameMatch[1].trim();
-        const pId = idMatch[1];
-        const pWorld = worldMatch ? worldMatch[1] : "327";
+        const pId = linkMatch[1];
+        const pWorld = linkMatch[2];
+        const pName = nameMatch ? nameMatch[1].trim() : "Giocatore " + pId;
 
+        // Carica il DB del mondo se diverso da quello in memoria
         if (MONDO_CARICATO !== pWorld) {
             try {
                 const r = await fetch(`https://re-panza.github.io/lk_tool/db_${pWorld}.json?v=${Date.now()}`);
@@ -230,32 +232,28 @@ l+k://player?605&327)..."></textarea>
         }
 
         const dataPlayer = DB_STORICO[pId];
-        const ptsMatch = input.match(/Punti:\s*([\d\.]+)/i);
-        const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
-
         let html = `<div class="result-box"><h3 style="margin:0 0 10px 0; text-align:center; color:#fff;">${pName}</h3><p style="text-align:center; font-size:12px; color:var(--accent); margin-top:-5px;">Mondo ${pWorld}</p>`;
 
         if (!dataPlayer) {
-            html += `<div class="status-badge status-new">NUOVO TARGET</div>
-                     <p style="text-align:center; font-size:13px; color:var(--muted);">ID ${pId} non presente nel database storico.</p>`;
+            html += `<div class="status-badge status-new">DATO ASSENTE</div>
+                     <p style="text-align:center; font-size:13px; color:var(--muted);">ID ${pId} non trovato nel database del Re.</p>`;
         } else {
             const ultimaMod = new Date(dataPlayer.ultima_modifica);
             const ora = new Date();
             const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
             const giorniDiff = Math.floor(oreDiff / 24);
 
-            if (currentPts !== 0 && dataPlayer.dati.pts !== currentPts) {
-                html += `<div class="status-badge status-active">🟢 ATTIVO ORA</div>
-                         <div class="info-row"><span>Status:</span> <span class="val">Cambiamento Punti</span></div>`;
-            } else if (oreDiff < 24) {
+            // LOGICA SOLO TEMPORALE: < 24 ore = ATTIVO
+            if (oreDiff < 24) {
                 html += `<div class="status-badge status-active">🟢 ATTIVO</div>
-                         <div class="info-row"><span>Ultima attività:</span> <span class="val">${oreDiff}h fa</span></div>`;
+                         <div class="info-row"><span>Visto l'ultima volta:</span> <span class="val">${oreDiff}h fa</span></div>`;
             } else {
-                html += `<div class="status-badge status-inactive">🔴 POTENZIALMENTE INATTIVO</div>
+                html += `<div class="status-badge status-inactive">🔴 INATTIVO</div>
                          <div class="info-row"><span>Inattivo da:</span> <span class="val">${giorniDiff} giorni</span></div>`;
             }
-            html += `<div class="info-row"><span>Ultimo salvataggio:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
-            html += `<div class="info-row"><span>Punti salvati:</span> <span class="val">${dataPlayer.dati.pts.toLocaleString()}</span></div>`;
+            
+            html += `<div class="info-row"><span>Data salvataggio:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
+            html += `<div class="info-row"><span>ID Giocatore:</span> <span class="val">${pId}</span></div>`;
         }
         
         resArea.innerHTML = html + `</div>`;
