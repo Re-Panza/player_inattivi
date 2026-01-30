@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://re-panza.github.io/lk_tool/icona.png">
+    
+    <title>Check Inattivi - L&K Tool</title>
+    
+    <script src="https://re-panza.github.io/lk_tool/version.js"></script>
+    <script>
+      document.write(`<link rel="manifest" href="https://re-panza.github.io/lk_tool/manifest.json?v=${APP_VERSION}">`);
+    </script>
+
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #111c33;
+            --muted: #93a4c7;
+            --text: #e8eefc;
+            --accent: #60a5fa;
+            --border: rgba(255, 255, 255, .10);
+            --success: #34d399;
+            --danger: #ef4444;
+            --dangerBg: rgba(239, 68, 68, .12);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body { 
+            margin: 0;
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            background: radial-gradient(1200px 600px at 20% 0%, rgba(96,165,250,.25), transparent 60%),
+                        radial-gradient(1000px 500px at 90% 10%, rgba(52,211,153,.18), transparent 55%),
+                        var(--bg);
+            color: var(--text);
+            padding: env(safe-area-inset-top, 20px) 20px 40px 20px;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .container { 
+            max-width: 500px; 
+            margin: 0 auto; 
+            background: rgba(17,28,51,.80); 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 32px 24px; 
+            border-radius: 24px; 
+            border: 1px solid var(--border); 
+            box-shadow: 0 20px 50px rgba(0,0,0,.3); 
+        }
+
+        .nav-header { 
+            max-width: 500px; 
+            margin: 0 auto 20px auto; 
+            display: flex; 
+            justify-content: flex-start; 
+        }
+        
+        .btn-home { 
+            text-decoration: none; 
+            color: var(--accent); 
+            font-weight: 700; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 8px; 
+            font-size: 16px;
+        }
+
+        h2 { 
+            margin: 0 0 24px 0; 
+            font-size: 26px; 
+            font-weight: 800;
+            color: #fff; 
+            text-align: center; 
+            letter-spacing: -0.02em;
+        }
+
+        textarea { 
+            width: 100%; 
+            height: 140px; 
+            padding: 16px; 
+            margin-bottom: 20px; 
+            border-radius: 16px; 
+            border: 1px solid var(--border); 
+            background: rgba(255,255,255,.05); 
+            color: var(--text); 
+            outline: none;
+            font-size: 16px; 
+            font-family: inherit;
+            resize: none;
+            -webkit-user-select: text;
+            user-select: text;
+            transition: border-color 0.2s;
+        }
+        textarea:focus { border-color: var(--accent); }
+
+        .btn-analizza { 
+            width: 100%; 
+            padding: 16px; 
+            background: var(--accent); 
+            border: none;
+            font-weight: 800; 
+            font-size: 17px; 
+            border-radius: 16px; 
+            cursor: pointer; 
+            color: #0f172a; 
+            margin-bottom: 12px; 
+            transition: transform 0.1s;
+        }
+        .btn-analizza:active { transform: scale(0.98); }
+
+        /* Stile Risultati */
+        #risultati { margin-top: 24px; display: none; }
+        .result-card {
+            background: rgba(255,255,255,.03); 
+            padding: 20px; 
+            border-radius: 18px; 
+            border: 1px solid var(--border); 
+        }
+        .status-badge {
+            display: block; text-align: center; padding: 12px; border-radius: 12px;
+            font-weight: 800; margin-bottom: 18px; font-size: 15px; text-transform: uppercase;
+        }
+        .status-active { background: rgba(52, 211, 153, 0.12); color: var(--success); border: 1px solid rgba(52, 211, 153, 0.3); }
+        .status-inactive { background: var(--dangerBg); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .status-new { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+
+        .info-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .info-row:last-child { border-bottom: none; }
+        .val { color: var(--accent); font-weight: 700; }
+
+        /* Footer PayPal IDENTICO alle altre pagine */
+        .paypal-footer { text-align: center; margin-top: 40px; padding: 30px 20px; border-top: 1px solid var(--border); }
+        .paypal-link {
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            background: rgba(0, 112, 186, 0.1);
+            padding: 12px 24px;
+            border-radius: 50px;
+            border: 1px solid rgba(0, 112, 186, 0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.2s;
+        }
+
+        /* RE PANZA ASSISTANT CSS */
+        #ai-assistant-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+        #ai-button { width: 70px; height: 70px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.4); overflow: hidden; border: 2px solid var(--accent); }
+        #ai-button img { width: 100%; height: 100%; object-fit: cover; }
+        #ai-window { display: none; position: absolute; bottom: 85px; right: 0; width: 85vw; max-width: 320px; background: var(--card); border: 1px solid var(--accent); border-radius: 20px; padding: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); backdrop-filter: blur(10px); }
+        .ai-header { color: var(--accent); font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+        #ai-content { max-height: 250px; overflow-y: auto; margin-bottom: 10px; font-size: 13px; color: var(--text); }
+        .ai-msg { background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin-bottom: 10px; line-height: 1.4; }
+        .ai-option { border: 1px solid var(--accent); color: var(--accent); padding: 6px 10px; border-radius: 20px; margin: 3px; display: inline-block; cursor: pointer; font-size: 11px; }
+    </style>
+</head>
+<body>
+
+    <div class="nav-header">
+        <a href="https://re-panza.github.io/lk_tool/index.html" class="btn-home">🏠 Torna alla Home</a>
+    </div>
+
+    <div class="container">
+        <h2>🕵️ Check Inattività</h2>
+        
+        <textarea id="player-input" placeholder="Incolla qui il profilo...&#10;Nome giocatore: Re Panza&#10;l+k://player?605&327"></textarea>
+        
+        <button class="btn-analizza" onclick="checkActivity()">ANALIZZA STATUS</button>
+
+        <div id="risultati"></div>
+    </div>
+
+    <footer class="paypal-footer">
+        <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Ti piace questo strumento?</p>
+        <a href="https://www.paypal.me/AmedeoPanza" target="_blank" class="paypal-link">
+            ☕ Offrimi un caffè su PayPal
+        </a>
+    </footer>
+
+    <div id="ai-assistant-container">
+        <div id="ai-window">
+            <div class="ai-header"><span>👑 Re Panza AI</span> <span onclick="toggleAI()" style="cursor:pointer">×</span></div>
+            <div id="ai-content">
+                <p class="ai-msg">Saluti! Incolla il profilo nemico. Se non vedo cambiamenti nei punti per 24 ore, è una farm!</p>
+                <div class="ai-option" onclick="aiAnswer(1)">❓ Come funziona?</div>
+                <div class="ai-option" onclick="aiAnswer(2)">🕒 Logica 24h</div>
+            </div>
+        </div>
+        <div id="ai-button" onclick="toggleAI()">
+            <img src="https://re-panza.github.io/lk_tool/re-panza-ai.png" alt="Re Panza">
+        </div>
+    </div>
+
+    <script>
+        let DB_STORICO = {};
+
+        // Caricamento DB storico
+        window.onload = async () => {
+            try {
+                const r = await fetch('db_storico.json?v=' + Date.now());
+                DB_STORICO = await r.json();
+            } catch (e) { console.error("Database storico non ancora disponibile."); }
+        };
+
+        function checkActivity() {
+            const input = document.getElementById('player-input').value;
+            const resArea = document.getElementById('risultati');
+
+            const nameMatch = input.match(/(?:Nome|Giocatore|Nome giocatore):\s*(.+?)(?:\n|$)/i);
+            const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)/);
+
+            if (!nameMatch || !idMatch) {
+                alert("❌ Formato non valido! Incolla il profilo completo.");
+                return;
+            }
+
+            const pName = nameMatch[1].trim();
+            const pId = idMatch[1];
+            const dataPlayer = DB_STORICO[pId];
+
+            const ptsMatch = input.match(/Punti:\s*([\d\.]+)/i);
+            const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
+
+            let html = `<div class="result-card"><h3 style="margin:0 0 15px 0; text-align:center; color:#fff;">${pName}</h3>`;
+
+            if (!dataPlayer) {
+                html += `<div class="status-badge status-new">NUOVO TARGET</div>
+                         <p style="font-size:13px; text-align:center; color:var(--muted);">ID ${pId} non presente nello storico. Inizio a tracciarlo da ora.</p>`;
+            } else {
+                const ultimaMod = new Date(dataPlayer.ultima_modifica);
+                const ora = new Date();
+                const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
+                const giorniDiff = Math.floor(oreDiff / 24);
+
+                if (currentPts !== 0 && dataPlayer.dati.punti !== currentPts) {
+                    html += `<div class="status-badge status-active">🟢 ATTIVO ORA</div>
+                             <div class="info-row"><span>Status:</span> <span class="val">Cambiamento rilevato live</span></div>`;
+                } else if (oreDiff < 24) {
+                    html += `<div class="status-badge status-active">🟢 ATTIVO RECENTEMENTE</div>
+                             <div class="info-row"><span>Ultima attività:</span> <span class="val">${oreDiff} ore fa</span></div>`;
+                } else {
+                    html += `<div class="status-badge status-inactive">🔴 POTENZIALMENTE INATTIVO</div>
+                             <div class="info-row"><span>Fermo da:</span> <span class="val">${giorniDiff} giorni</span></div>
+                             <div class="info-row"><span>Ore totali:</span> <span class="val">${oreDiff}h</span></div>`;
+                }
+                html += `<div class="info-row"><span>Ultimo aggiornamento:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
+            }
+            html += `</div>`;
+            resArea.innerHTML = html;
+            resArea.style.display = 'block';
+        }
+
+        function toggleAI() {
+            const win = document.getElementById('ai-window');
+            win.style.display = win.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function aiAnswer(c) {
+            const cont = document.getElementById('ai-content');
+            let m = c === 1 ? "Confronto i dati attuali con la mia scansione di 2 ore fa. Se nulla è cambiato, il timer sale." : "Ti segnalo come inattivo solo se il giocatore non fa nemmeno 1 punto per 24 ore consecutive.";
+            cont.innerHTML += `<div class="ai-msg">👑 ${m}</div>`;
+            cont.scrollTop = cont.scrollHeight;
+        }
+    </script>
+</body>
+</html>
