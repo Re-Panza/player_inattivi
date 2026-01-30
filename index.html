@@ -201,52 +201,49 @@ l+k://alliance?7&327..."></textarea>
         win.style.display = win.style.display === 'block' ? 'none' : 'block';
     }
 async function checkActivity() {
-        const input = document.getElementById('player-input').value;
+        const rawInput = document.getElementById('player-input').value;
+        const input = rawInput.trim(); 
         const resArea = document.getElementById('risultati');
 
-        // Regex per link Alleanza (l+k://alliance?ID&MONDO)
+        // 1. Controllo se è un link Alleanza
         const allyMatch = input.match(/l\+k:\/\/alliance\?(\d+)(?:&|&world_id=)(\d+)/) || 
                           input.match(/l\+k:\/\/alliance\?id=(\d+)&world_id=(\d+)/);
 
-        if (!allyMatch) {
-            alert("❌ Questo strumento ora serve per analizzare le ALLEANZE.\nIncolla un link tipo: l+k://alliance?123&327");
+        if (allyMatch) {
+            await handleAllianceCheck(allyMatch[1], allyMatch[2]);
             return;
         }
 
-        const targetAllyId = allyMatch[1];
-        const pWorld = allyMatch[2];
+        // 2. Controllo se è un profilo Giocatore (Rigoroso: Nome giocatore o Giocatore)
+        const labelMatch = input.match(/^(?:Nome giocatore|Giocatore):\s*(.+?)(?:\n|$)/mi);
+        const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)/);
+        const worldMatch = input.match(/world_id=(\d+)/);
 
-        // Caricamento DB del mondo specifico
-        if (MONDO_CARICATO !== pWorld) {
-            resArea.innerHTML = `<p style="text-align:center; padding:20px;">⏳ Caricamento Database Mondo ${pWorld}...</p>`;
-            document.getElementById('card-risultati').style.display = 'block';
-            try {
-                const r = await fetch(`https://re-panza.github.io/lk_tool/db_${pWorld}.json?v=${Date.now()}`);
-                if (r.ok) {
-                    DB_STORICO = await r.json();
-                    MONDO_CARICATO = pWorld;
-                } else {
-                    alert("⚠️ Database non trovato per questo mondo.");
-                    return;
-                }
-            } catch (e) { 
-                alert("❌ Errore nel caricamento dati.");
-                return; 
-            }
+        if (!labelMatch) {
+            alert("❌ Errore! Il profilo deve contenere 'Nome giocatore:' o 'Giocatore:'.");
+            return;
         }
+
+        if (!idMatch || !worldMatch) {
+            alert("❌ Errore! Link giocatore non trovato o incompleto.");
+            return;
+        }
+
+        await handleSinglePlayerCheck(labelMatch[1].trim(), idMatch[1], worldMatch[1], input);
+    }
+
+    async function handleAllianceCheck(targetAllyId, pWorld) {
+        const resArea = document.getElementById('risultati');
+        await caricaDatabase(pWorld);
 
         let inattiviFound = [];
         const ora = new Date();
 
-        // Ciclo su tutto il database per filtrare i membri dell'alleanza target
         for (let pId in DB_STORICO) {
             const player = DB_STORICO[pId];
-            
-            // Verifica appartenenza ally e inattività (> 24 ore)
             if (player.dati && String(player.dati.ally_id) === targetAllyId) {
                 const ultimaMod = new Date(player.ultima_modifica);
                 const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
-
                 if (oreDiff >= 24) {
                     inattiviFound.push({
                         nome: player.dati.nome || "ID " + pId,
@@ -258,19 +255,15 @@ async function checkActivity() {
             }
         }
 
-        // Costruzione HTML finale
         let html = `<div style="text-align:center; margin-bottom:15px;">
                         <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
                         <small style="color:var(--muted);">Mondo ${pWorld}</small>
                     </div>`;
 
         if (inattiviFound.length === 0) {
-            html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>
-                     <p style="text-align:center; font-size:13px; color:var(--muted);">Nessun membro dell'alleanza risulta inattivo nel DB.</p>`;
+            html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>`;
         } else {
-            // Ordina i risultati per giorni di inattività (dal più dormiente)
             inattiviFound.sort((a, b) => b.giorni - a.giorni);
-
             inattiviFound.forEach(p => {
                 html += `
                 <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
@@ -278,15 +271,134 @@ async function checkActivity() {
                         <b style="font-size:15px; color:var(--text);">${p.nome}</b>
                         <span class="status-badge status-inactive" style="margin:0; padding:4px 10px; font-size:11px;">${p.giorni}gg OFF</span>
                     </div>
-                    <div style="font-size:11px; color:var(--muted); margin-top:5px;">
-                        ID: ${p.id} | Ultimo check: ${p.data}
+                </div>`;
+            });
+        }
+        resArea.innerHTML = html;
+        document.getElementById('card-risultati').style.display = 'block';
+    }
+
+    async function checkActivity() {
+        const rawInput = document.getElementById('player-input').value;
+        const input = rawInput.trim(); 
+        const resArea = document.getElementById('risultati');
+
+        // 1. Controllo se è un link Alleanza
+        const allyMatch = input.match(/l\+k:\/\/alliance\?(\d+)(?:&|&world_id=)(\d+)/) || 
+                          input.match(/l\+k:\/\/alliance\?id=(\d+)&world_id=(\d+)/);
+
+        if (allyMatch) {
+            await handleAllianceCheck(allyMatch[1], allyMatch[2]);
+            return;
+        }
+
+        // 2. Controllo se è un profilo Giocatore (Rigoroso: Nome giocatore o Giocatore)
+        const labelMatch = input.match(/^(?:Nome giocatore|Giocatore):\s*(.+?)(?:\n|$)/mi);
+        
+        // REGEX GIOCATORE: Riconosce sia ?id=605&world_id=327 che ?605&327
+        const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)(?:&|&world_id=)?(\d+)/);
+
+        if (!labelMatch) {
+            alert("❌ Errore! Il profilo deve contenere 'Nome giocatore:' o 'Giocatore:'.");
+            return;
+        }
+
+        if (!idMatch) {
+            alert("❌ Errore! Link giocatore non trovato o formato non supportato.");
+            return;
+        }
+
+        const pId = idMatch[1];
+        const pWorld = idMatch[2];
+
+        await handleSinglePlayerCheck(labelMatch[1].trim(), pId, pWorld, input);
+    }
+
+    async function handleAllianceCheck(targetAllyId, pWorld) {
+        const resArea = document.getElementById('risultati');
+        await caricaDatabase(pWorld);
+
+        let inattiviFound = [];
+        const ora = new Date();
+
+        for (let pId in DB_STORICO) {
+            const player = DB_STORICO[pId];
+            if (player.dati && String(player.dati.ally_id) === targetAllyId) {
+                const ultimaMod = new Date(player.ultima_modifica);
+                const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
+                if (oreDiff >= 24) {
+                    inattiviFound.push({
+                        nome: player.dati.nome || "ID " + pId,
+                        id: pId,
+                        giorni: Math.floor(oreDiff / 24),
+                        data: ultimaMod.toLocaleDateString()
+                    });
+                }
+            }
+        }
+
+        let html = `<div style="text-align:center; margin-bottom:15px;">
+                        <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
+                        <small style="color:var(--muted);">Mondo ${pWorld}</small>
+                    </div>`;
+
+        if (inattiviFound.length === 0) {
+            html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>`;
+        } else {
+            inattiviFound.sort((a, b) => b.giorni - a.giorni);
+            inattiviFound.forEach(p => {
+                html += `
+                <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <b style="font-size:15px; color:var(--text);">${p.nome}</b>
+                        <span class="status-badge status-inactive" style="margin:0; padding:4px 10px; font-size:11px;">${p.giorni}gg OFF</span>
                     </div>
                 </div>`;
             });
         }
-        
         resArea.innerHTML = html;
         document.getElementById('card-risultati').style.display = 'block';
+    }
+
+    async function handleSinglePlayerCheck(pName, pId, pWorld, fullInput) {
+        const resArea = document.getElementById('risultati');
+        await caricaDatabase(pWorld);
+
+        const dataPlayer = DB_STORICO[pId];
+        const ptsMatch = fullInput.match(/Punti:\s*([\d\.]+)/i);
+        const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
+
+        let html = `<div style="text-align:center; margin-bottom:15px;"><h3 style="margin:0; color:var(--accent);">${pName}</h3></div>`;
+
+        if (!dataPlayer) {
+            html += `<div class="status-badge status-new">NUOVO TARGET (Non a DB)</div>`;
+        } else {
+            const ultimaMod = new Date(dataPlayer.ultima_modifica);
+            const oreDiff = Math.floor((new Date() - ultimaMod) / 36e5);
+            
+            if (currentPts !== 0 && dataPlayer.dati.pts !== currentPts) {
+                html += `<div class="status-badge status-active">🟢 ATTIVO ORA (Cambio Punti)</div>`;
+            } else if (oreDiff < 24) {
+                html += `<div class="status-badge status-active">🟢 ATTIVO (${oreDiff}h fa)</div>`;
+            } else {
+                html += `<div class="status-badge status-inactive">🔴 INATTIVO (${Math.floor(oreDiff/24)}gg)</div>`;
+            }
+            html += `<div class="info-row"><span>Ultimo check DB:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
+        }
+        resArea.innerHTML = html;
+        document.getElementById('card-risultati').style.display = 'block';
+    }
+
+    async function caricaDatabase(pWorld) {
+        if (MONDO_CARICATO !== pWorld) {
+            try {
+                const r = await fetch(`https://re-panza.github.io/lk_tool/db_${pWorld}.json?v=${Date.now()}`);
+                if (r.ok) {
+                    DB_STORICO = await r.json();
+                    MONDO_CARICATO = pWorld;
+                }
+            } catch (e) { console.error("Errore caricamento DB"); }
+        }
     }
         document.getElementById('ai-input')?.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') chiediAlRe();
