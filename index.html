@@ -201,76 +201,91 @@
         </div>
     </div>
 
-    <script>
-        let DB_STORICO = {};
+    <<script>
+    let DB_STORICO = {};
+    let MONDO_CARICATO = "";
 
-        // Caricamento DB storico
-        window.onload = async () => {
+    // Funzione principale di analisi
+    async function checkActivity() {
+        const input = document.getElementById('player-input').value;
+        const resArea = document.getElementById('risultati');
+
+        // 1. REGEX per estrarre Nome, ID e Mondo
+        const nameMatch = input.match(/(?:Nome|Giocatore|Nome giocatore):\s*(.+?)(?:\n|$)/i);
+        const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)/);
+        const worldMatch = input.match(/world_id=(\d+)/) || input.match(/\?(\d+)/) || input.match(/&(\d+)/);
+
+        if (!nameMatch || !idMatch) {
+            alert("❌ Errore! Formato profilo non riconosciuto.\nAssicurati di incollare il profilo completo.");
+            return;
+        }
+
+        const pName = nameMatch[1].trim();
+        const pId = idMatch[1];
+        const pWorld = worldMatch ? worldMatch[1] : "327"; // Default 327 se non lo trova
+
+        // 2. CARICAMENTO DINAMICO (Carica il file db_XXX.json solo se necessario)
+        if (MONDO_CARICATO !== pWorld) {
             try {
-                const r = await fetch('db_storico.json?v=' + Date.now());
-                DB_STORICO = await r.json();
-            } catch (e) { console.error("Database storico non ancora disponibile."); }
-        };
-
-        function checkActivity() {
-            const input = document.getElementById('player-input').value;
-            const resArea = document.getElementById('risultati');
-
-            const nameMatch = input.match(/(?:Nome|Giocatore|Nome giocatore):\s*(.+?)(?:\n|$)/i);
-            const idMatch = input.match(/l\+k:\/\/player\?(?:id=)?(\d+)/);
-
-            if (!nameMatch || !idMatch) {
-                alert("❌ Formato non valido! Incolla il profilo completo.");
-                return;
-            }
-
-            const pName = nameMatch[1].trim();
-            const pId = idMatch[1];
-            const dataPlayer = DB_STORICO[pId];
-
-            const ptsMatch = input.match(/Punti:\s*([\d\.]+)/i);
-            const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
-
-            let html = `<div class="result-card"><h3 style="margin:0 0 15px 0; text-align:center; color:#fff;">${pName}</h3>`;
-
-            if (!dataPlayer) {
-                html += `<div class="status-badge status-new">NUOVO TARGET</div>
-                         <p style="font-size:13px; text-align:center; color:var(--muted);">ID ${pId} non presente nello storico. Inizio a tracciarlo da ora.</p>`;
-            } else {
-                const ultimaMod = new Date(dataPlayer.ultima_modifica);
-                const ora = new Date();
-                const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
-                const giorniDiff = Math.floor(oreDiff / 24);
-
-                if (currentPts !== 0 && dataPlayer.dati.punti !== currentPts) {
-                    html += `<div class="status-badge status-active">🟢 ATTIVO ORA</div>
-                             <div class="info-row"><span>Status:</span> <span class="val">Cambiamento rilevato live</span></div>`;
-                } else if (oreDiff < 24) {
-                    html += `<div class="status-badge status-active">🟢 ATTIVO RECENTEMENTE</div>
-                             <div class="info-row"><span>Ultima attività:</span> <span class="val">${oreDiff} ore fa</span></div>`;
+                // Esempio: fetch('db_337.json')
+                const r = await fetch(`db_${pWorld}.json?v=${Date.now()}`);
+                if (r.ok) {
+                    DB_STORICO = await r.json();
+                    MONDO_CARICATO = pWorld;
                 } else {
-                    html += `<div class="status-badge status-inactive">🔴 POTENZIALMENTE INATTIVO</div>
-                             <div class="info-row"><span>Fermo da:</span> <span class="val">${giorniDiff} giorni</span></div>
-                             <div class="info-row"><span>Ore totali:</span> <span class="val">${oreDiff}h</span></div>`;
+                    DB_STORICO = {}; // Se il file non esiste ancora per quel mondo
                 }
-                html += `<div class="info-row"><span>Ultimo aggiornamento:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
+            } catch (e) { 
+                DB_STORICO = {}; 
             }
-            html += `</div>`;
-            resArea.innerHTML = html;
-            resArea.style.display = 'block';
         }
 
-        function toggleAI() {
-            const win = document.getElementById('ai-window');
-            win.style.display = win.style.display === 'block' ? 'none' : 'block';
-        }
+        // 3. LOGICA DI ANALISI PUNTI
+        const dataPlayer = DB_STORICO[pId];
+        const ptsMatch = input.match(/Punti:\s*([\d\.]+)/i);
+        const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
 
-        function aiAnswer(c) {
-            const cont = document.getElementById('ai-content');
-            let m = c === 1 ? "Confronto i dati attuali con la mia scansione di 2 ore fa. Se nulla è cambiato, il timer sale." : "Ti segnalo come inattivo solo se il giocatore non fa nemmeno 1 punto per 24 ore consecutive.";
-            cont.innerHTML += `<div class="ai-msg">👑 ${m}</div>`;
-            cont.scrollTop = cont.scrollHeight;
+        let html = `<div class="result-card"><h3 style="margin:0 0 15px 0; text-align:center; color:#fff;">${pName}</h3><p style="text-align:center; font-size:12px; color:var(--accent); margin-top:-10px;">Mondo ${pWorld}</p>`;
+
+        if (!dataPlayer) {
+            html += `<div class="status-badge status-new">NUOVO TARGET</div>
+                     <p style="text-align:center; font-size:13px; color:var(--muted);">ID ${pId} non presente nel database ${pWorld}. Inizio a tracciarlo da ora.</p>`;
+        } else {
+            const ultimaMod = new Date(dataPlayer.ultima_modifica);
+            const ora = new Date();
+            const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
+            const giorniDiff = Math.floor(oreDiff / 24);
+
+            if (currentPts !== 0 && dataPlayer.dati.pts !== currentPts) {
+                html += `<div class="status-badge status-active">🟢 ATTIVO ORA</div>
+                         <div class="info-row"><span>Status:</span> <span class="val">Cambiamento rilevato live</span></div>`;
+            } else if (oreDiff < 24) {
+                html += `<div class="status-badge status-active">🟢 ATTIVO</div>
+                         <div class="info-row"><span>Ultima attività:</span> <span class="val">${oreDiff} ore fa</span></div>`;
+            } else {
+                html += `<div class="status-badge status-inactive">🔴 POTENZIALMENTE INATTIVO</div>
+                         <div class="info-row"><span>Inattivo da:</span> <span class="val">${giorniDiff} giorni</span></div>
+                         <div class="info-row"><span>Ore totali:</span> <span class="val">${oreDiff}h</span></div>`;
+            }
+            html += `<div class="info-row"><span>Ultima modifica punti:</span> <span class="val">${ultimaMod.toLocaleDateString()} ${ultimaMod.getHours()}:00</span></div>`;
         }
-    </script>
+        
+        resArea.innerHTML = html + `</div>`;
+        resArea.style.display = 'block';
+    }
+
+    // --- FUNZIONI ASSISTENTE ---
+    function toggleAI() {
+        const win = document.getElementById('ai-window');
+        win.style.display = win.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function aiAnswer(c) {
+        const cont = document.getElementById('ai-content');
+        let m = c === 1 ? "Incolla il profilo. Io riconosco il mondo e carico il database giusto!" : "Se non vedi modifiche per 24 ore, il player è probabilmente inattivo.";
+        cont.innerHTML += `<div class="ai-msg">👑 ${m}</div>`;
+        cont.scrollTop = cont.scrollHeight;
+    }
+</script>
 </body>
 </html>
