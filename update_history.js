@@ -1,57 +1,36 @@
 const fs = require('fs');
 
-// Configurazione nomi file (ADATTA QUESTI AI TUOI NOMI FILE)
-const FILE_SCAN_ATTUALE = 'data_327.json'; 
-const FILE_STORICO = 'db_storico.json';
+// Leggiamo il file passato dal workflow (es: data_327.json o data_337.json)
+const inputFile = process.argv[2]; 
+const FILE_DB = 'db_storico.json';
+
+if (!inputFile || !fs.existsSync(inputFile)) {
+    console.log("Utilizzo: node update_history.js [nome_file.json]");
+    process.exit(1);
+}
 
 try {
-    if (!fs.existsSync(FILE_SCAN_ATTUALE)) {
-        console.log("File scansione non trovato. Salto aggiornamento storico.");
-        process.exit(0);
-    }
+    const scanData = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
+    let db = fs.existsSync(FILE_DB) ? JSON.parse(fs.readFileSync(FILE_DB, 'utf8')) : {};
+    const now = new Date().toISOString();
 
-    const scanData = JSON.parse(fs.readFileSync(FILE_SCAN_ATTUALE, 'utf8'));
-    let historyDB = fs.existsSync(FILE_STORICO) ? JSON.parse(fs.readFileSync(FILE_STORICO, 'utf8')) : {};
+    scanData.forEach(p => {
+        // Creiamo una chiave unica che includa il mondo per evitare sovrapposizioni di ID
+        // Se il file è data_337.json, il prefisso sarà "337_"
+        const mondoPrefix = inputFile.match(/\d+/)[0];
+        const uniqueId = `${mondoPrefix}_${p.id}`;
+        
+        const current = { pts: p.points || 0, cst: p.castles ? p.castles.length : 0 };
 
-    const oraInCuiGira = new Date().toISOString();
-    let modificati = 0;
-
-    // Assumiamo che scanData sia un array di giocatori
-    scanData.forEach(player => {
-        const id = player.id;
-        // Creiamo una "firma" del giocatore: se cambiano punti o numero castelli, è attivo
-        const currentData = {
-            punti: player.points || 0,
-            castelli: player.castles ? player.castles.length : 0
-        };
-
-        if (!historyDB[id]) {
-            // Primo inserimento assoluto per questo giocatore
-            historyDB[id] = {
-                nome: player.name,
-                ultima_modifica: oraInCuiGira,
-                dati: currentData
-            };
-            modificati++;
-        } else {
-            // Confronto: i punti o i castelli sono diversi dall'ultima volta?
-            const vecchio = historyDB[id].dati;
-            const eCambiato = vecchio.punti !== currentData.punti || vecchio.castelli !== currentData.castelli;
-
-            if (eCambiato) {
-                // IL GIOCATORE È ATTIVO: aggiorniamo la data e i nuovi dati
-                historyDB[id].ultima_modifica = oraInCuiGira;
-                historyDB[id].dati = currentData;
-                historyDB[id].nome = player.name;
-                modificati++;
-            }
-            // Se NON è cambiato, NON aggiorniamo 'ultima_modifica'. 
-            // Il tempo inizierà a scorrere da solo.
+        if (!db[uniqueId]) {
+            db[uniqueId] = { nome: p.name, ultima_modifica: now, dati: current, mondo: mondoPrefix };
+        } else if (db[uniqueId].dati.pts !== current.pts || db[uniqueId].dati.cst !== current.cst) {
+            db[uniqueId].ultima_modifica = now;
+            db[uniqueId].dati = current;
+            db[uniqueId].nome = p.name;
         }
     });
 
-    fs.writeFileSync(FILE_STORICO, JSON.stringify(historyDB, null, 2));
-    console.log(`Storico aggiornato: ${modificati} giocatori attivi rilevati.`);
-} catch (err) {
-    console.error("Errore script storico:", err);
-}
+    fs.writeFileSync(FILE_DB, JSON.stringify(db, null, 2));
+    console.log(`Storico aggiornato per il file: ${inputFile}`);
+} catch (e) { console.log("Errore:", e); }
