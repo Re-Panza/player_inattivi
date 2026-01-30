@@ -203,64 +203,87 @@ async function checkActivity() {
         const input = document.getElementById('player-input').value;
         const resArea = document.getElementById('risultati');
 
-        // Regex per estrarre ID e Mondo dal link (gestisce entrambi i formati L&K)
-        const linkMatch = input.match(/l\+k:\/\/player\?(\d+)(?:&|&world_id=)(\d+)/) || 
-                          input.match(/l\+k:\/\/player\?id=(\d+)&world_id=(\d+)/);
-        
-        const nameMatch = input.match(/(?:Nome|Giocatore|Nome giocatore):\s*(.+?)(?:\n|$)/i);
+        // Estrae ID Alleanza e Mondo dal link (es: l+k://alliance?123&327)
+        const allyMatch = input.match(/l\+k:\/\/alliance\?(\d+)(?:&|&world_id=)(\d+)/) || 
+                          input.match(/l\+k:\/\/alliance\?id=(\d+)&world_id=(\d+)/);
 
-        if (!linkMatch) {
-            alert("❌ Link non riconosciuto! Incolla il profilo che contiene l+k://player?...");
+        if (!allyMatch) {
+            alert("❌ Incolla un link Alleanza valido (l+k://alliance?...)");
             return;
         }
 
-        const pId = linkMatch[1];
-        const pWorld = linkMatch[2];
-        const pName = nameMatch ? nameMatch[1].trim() : "Giocatore " + pId;
+        const targetAllyId = allyMatch[1];
+        const pWorld = allyMatch[2];
 
-        // Carica il DB del mondo se diverso da quello in memoria
+        // Caricamento DB del mondo
         if (MONDO_CARICATO !== pWorld) {
+            resArea.innerHTML = "<p style='text-align:center;'>⏳ Caricamento Database Mondo " + pWorld + "...</p>";
             try {
                 const r = await fetch(`https://re-panza.github.io/lk_tool/db_${pWorld}.json?v=${Date.now()}`);
                 if (r.ok) {
                     DB_STORICO = await r.json();
                     MONDO_CARICATO = pWorld;
                 } else {
-                    DB_STORICO = {};
+                    alert("⚠️ Database non trovato per questo mondo.");
+                    return;
                 }
-            } catch (e) { DB_STORICO = {}; }
+            } catch (e) { return; }
         }
 
-        const dataPlayer = DB_STORICO[pId];
-        let html = `<div class="result-box"><h3 style="margin:0 0 10px 0; text-align:center; color:#fff;">${pName}</h3><p style="text-align:center; font-size:12px; color:var(--accent); margin-top:-5px;">Mondo ${pWorld}</p>`;
+        let inattiviFound = [];
+        const ora = new Date();
 
-        if (!dataPlayer) {
-            html += `<div class="status-badge status-new">DATO ASSENTE</div>
-                     <p style="text-align:center; font-size:13px; color:var(--muted);">ID ${pId} non trovato nel database del Re.</p>`;
-        } else {
-            const ultimaMod = new Date(dataPlayer.ultima_modifica);
-            const ora = new Date();
-            const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
-            const giorniDiff = Math.floor(oreDiff / 24);
-
-            // LOGICA SOLO TEMPORALE: < 24 ore = ATTIVO
-            if (oreDiff < 24) {
-                html += `<div class="status-badge status-active">🟢 ATTIVO</div>
-                         <div class="info-row"><span>Visto l'ultima volta:</span> <span class="val">${oreDiff}h fa</span></div>`;
-            } else {
-                html += `<div class="status-badge status-inactive">🔴 INATTIVO</div>
-                         <div class="info-row"><span>Inattivo da:</span> <span class="val">${giorniDiff} giorni</span></div>`;
-            }
+        // Scansione di tutto il DB per trovare i membri dell'ally inattivi
+        for (let pId in DB_STORICO) {
+            const player = DB_STORICO[pId];
             
-            html += `<div class="info-row"><span>Data salvataggio:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
-            html += `<div class="info-row"><span>ID Giocatore:</span> <span class="val">${pId}</span></div>`;
+            // Filtro: stessa Alleanza AND inattivo da più di 24 ore
+            if (String(player.dati.ally_id) === targetAllyId) {
+                const ultimaMod = new Date(player.ultima_modifica);
+                const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
+
+                if (oreDiff >= 24) {
+                    inattiviFound.push({
+                        nome: player.dati.nome || "ID " + pId,
+                        id: pId,
+                        giorni: Math.floor(oreDiff / 24),
+                        data: ultimaMod.toLocaleDateString()
+                    });
+                }
+            }
+        }
+
+        // Generazione HTML Risultati
+        let html = `<div style="text-align:center; margin-bottom:15px;">
+                        <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
+                        <small style="color:var(--muted);">Mondo ${pWorld}</small>
+                    </div>`;
+
+        if (inattiviFound.length === 0) {
+            html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>
+                     <p style="text-align:center; font-size:13px; color:var(--muted);">Nessun inattivo trovato nelle ultime 24 ore.</p>`;
+        } else {
+            // Ordina per chi è inattivo da più tempo
+            inattiviFound.sort((a, b) => b.giorni - a.giorni);
+
+            inattiviFound.forEach(p => {
+                html += `
+                <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <b style="font-size:15px;">${p.nome}</b>
+                        <span class="status-badge status-inactive" style="margin:0; padding:2px 8px; font-size:10px;">${p.giorni}gg OFF</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--muted); margin-top:5px;">
+                        ID: ${p.id} | Ultimo check: ${p.data}
+                    </div>
+                </div>`;
+            });
         }
         
-        resArea.innerHTML = html + `</div>`;
+        resArea.innerHTML = html;
         document.getElementById('card-risultati').style.display = 'block';
     }
-
-    document.getElementById('ai-input')?.addEventListener('keypress', function (e) {
+        document.getElementById('ai-input')?.addEventListener('keypress', function (e) {
         if (e.key === 'Enter') chiediAlRe();
     });
     </script>
