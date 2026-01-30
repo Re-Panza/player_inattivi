@@ -203,21 +203,22 @@ async function checkActivity() {
         const input = document.getElementById('player-input').value;
         const resArea = document.getElementById('risultati');
 
-        // Estrae ID Alleanza e Mondo dal link (es: l+k://alliance?123&327)
+        // Regex per link Alleanza (l+k://alliance?ID&MONDO)
         const allyMatch = input.match(/l\+k:\/\/alliance\?(\d+)(?:&|&world_id=)(\d+)/) || 
                           input.match(/l\+k:\/\/alliance\?id=(\d+)&world_id=(\d+)/);
 
         if (!allyMatch) {
-            alert("❌ Incolla un link Alleanza valido (l+k://alliance?...)");
+            alert("❌ Questo strumento ora serve per analizzare le ALLEANZE.\nIncolla un link tipo: l+k://alliance?123&327");
             return;
         }
 
         const targetAllyId = allyMatch[1];
         const pWorld = allyMatch[2];
 
-        // Caricamento DB del mondo
+        // Caricamento DB del mondo specifico
         if (MONDO_CARICATO !== pWorld) {
-            resArea.innerHTML = "<p style='text-align:center;'>⏳ Caricamento Database Mondo " + pWorld + "...</p>";
+            resArea.innerHTML = `<p style="text-align:center; padding:20px;">⏳ Caricamento Database Mondo ${pWorld}...</p>`;
+            document.getElementById('card-risultati').style.display = 'block';
             try {
                 const r = await fetch(`https://re-panza.github.io/lk_tool/db_${pWorld}.json?v=${Date.now()}`);
                 if (r.ok) {
@@ -227,18 +228,21 @@ async function checkActivity() {
                     alert("⚠️ Database non trovato per questo mondo.");
                     return;
                 }
-            } catch (e) { return; }
+            } catch (e) { 
+                alert("❌ Errore nel caricamento dati.");
+                return; 
+            }
         }
 
         let inattiviFound = [];
         const ora = new Date();
 
-        // Scansione di tutto il DB per trovare i membri dell'ally inattivi
+        // Ciclo su tutto il database per filtrare i membri dell'alleanza target
         for (let pId in DB_STORICO) {
             const player = DB_STORICO[pId];
             
-            // Filtro: stessa Alleanza AND inattivo da più di 24 ore
-            if (String(player.dati.ally_id) === targetAllyId) {
+            // Verifica appartenenza ally e inattività (> 24 ore)
+            if (player.dati && String(player.dati.ally_id) === targetAllyId) {
                 const ultimaMod = new Date(player.ultima_modifica);
                 const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
 
@@ -253,7 +257,7 @@ async function checkActivity() {
             }
         }
 
-        // Generazione HTML Risultati
+        // Costruzione HTML finale
         let html = `<div style="text-align:center; margin-bottom:15px;">
                         <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
                         <small style="color:var(--muted);">Mondo ${pWorld}</small>
@@ -261,17 +265,17 @@ async function checkActivity() {
 
         if (inattiviFound.length === 0) {
             html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>
-                     <p style="text-align:center; font-size:13px; color:var(--muted);">Nessun inattivo trovato nelle ultime 24 ore.</p>`;
+                     <p style="text-align:center; font-size:13px; color:var(--muted);">Nessun membro dell'alleanza risulta inattivo nel DB.</p>`;
         } else {
-            // Ordina per chi è inattivo da più tempo
+            // Ordina i risultati per giorni di inattività (dal più dormiente)
             inattiviFound.sort((a, b) => b.giorni - a.giorni);
 
             inattiviFound.forEach(p => {
                 html += `
                 <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <b style="font-size:15px;">${p.nome}</b>
-                        <span class="status-badge status-inactive" style="margin:0; padding:2px 8px; font-size:10px;">${p.giorni}gg OFF</span>
+                        <b style="font-size:15px; color:var(--text);">${p.nome}</b>
+                        <span class="status-badge status-inactive" style="margin:0; padding:4px 10px; font-size:11px;">${p.giorni}gg OFF</span>
                     </div>
                     <div style="font-size:11px; color:var(--muted); margin-top:5px;">
                         ID: ${p.id} | Ultimo check: ${p.data}
