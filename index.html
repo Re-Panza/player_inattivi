@@ -315,79 +315,93 @@ async function checkActivity() {
     }
 
     async function handleAllianceCheck(targetAllyId, pWorld) {
-        const resArea = document.getElementById('risultati');
-        await caricaDatabase(pWorld);
+    const resArea = document.getElementById('risultati');
+    // Carica il database db_XXX.json corrispondente al mondo
+    await caricaDatabase(pWorld);
 
-        let inattiviFound = [];
-        const ora = new Date();
+    let inattiviFound = [];
+    const ora = new Date();
 
-        for (let pId in DB_STORICO) {
-            const player = DB_STORICO[pId];
-            if (player.dati && String(player.dati.ally_id) === targetAllyId) {
+    // Cicla attraverso tutti i giocatori nel database storico
+    for (let pId in DB_STORICO) {
+        const player = DB_STORICO[pId];
+        
+        // Verifica se il giocatore appartiene all'alleanza cercata
+        // Nota: Assicurati che lo scanner o lo script storico salvino l'ally_id nei dati del player
+        if (player.dati && String(player.dati.ally_id) === targetAllyId) {
+            
+            // Applichiamo la logica perfezionata: verifichiamo il flag 'inattivo' calcolato dal server
+            if (player.inattivo === true) {
                 const ultimaMod = new Date(player.ultima_modifica);
                 const oreDiff = Math.floor((ora - ultimaMod) / 36e5);
-                if (oreDiff >= 24) {
-                    inattiviFound.push({
-                        nome: player.dati.nome || "ID " + pId,
-                        id: pId,
-                        giorni: Math.floor(oreDiff / 24),
-                        data: ultimaMod.toLocaleDateString()
-                    });
-                }
+                
+                inattiviFound.push({
+                    nome: player.nome || "ID " + pId,
+                    id: pId,
+                    giorni: Math.floor(oreDiff / 24),
+                    data: ultimaMod.toLocaleDateString()
+                });
             }
         }
-
-        let html = `<div style="text-align:center; margin-bottom:15px;">
-                        <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
-                        <small style="color:var(--muted);">Mondo ${pWorld}</small>
-                    </div>`;
-
-        if (inattiviFound.length === 0) {
-            html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>`;
-        } else {
-            inattiviFound.sort((a, b) => b.giorni - a.giorni);
-            inattiviFound.forEach(p => {
-                html += `
-                <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <b style="font-size:15px; color:var(--text);">${p.nome}</b>
-                        <span class="status-badge status-inactive" style="margin:0; padding:4px 10px; font-size:11px;">${p.giorni}gg OFF</span>
-                    </div>
-                </div>`;
-            });
-        }
-        resArea.innerHTML = html;
-        document.getElementById('card-risultati').style.display = 'block';
     }
+
+    let html = `
+        <div style="text-align:center; margin-bottom:15px;">
+            <h3 style="margin:0; color:var(--accent);">Analisi Alleanza ${targetAllyId}</h3>
+            <small style="color:var(--muted);">Mondo ${pWorld}</small>
+        </div>`;
+
+    if (inattiviFound.length === 0) {
+        html += `<div class="status-badge status-active">TUTTI ATTIVI ✅</div>`;
+    } else {
+        // Ordina la lista per mostrare prima chi è inattivo da più tempo
+        inattiviFound.sort((a, b) => b.giorni - a.giorni);
+        
+        inattiviFound.forEach(p => {
+            html += `
+            <div class="result-box" style="margin-bottom:10px; border-left-color: var(--danger);">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <b style="font-size:15px; color:var(--text);">${p.nome}</b><br>
+                        <small style="color:var(--muted);">Ultimo cambio: ${p.data}</small>
+                    </div>
+                    <span class="status-badge status-inactive" style="margin:0; padding:4px 10px; font-size:11px;">
+                        ${p.giorni}gg OFF
+                    </span>
+                </div>
+            </div>`;
+        });
+    }
+
+    resArea.innerHTML = html;
+    document.getElementById('card-risultati').style.display = 'block';
+}
 
     async function handleSinglePlayerCheck(pName, pId, pWorld, fullInput) {
-        const resArea = document.getElementById('risultati');
-        await caricaDatabase(pWorld);
+    const resArea = document.getElementById('risultati');
+    await caricaDatabase(pWorld);
 
-        const dataPlayer = DB_STORICO[pId];
-        const ptsMatch = fullInput.match(/Punti:\s*([\d\.]+)/i);
-        const currentPts = ptsMatch ? parseInt(ptsMatch[1].replace(/\./g, '')) : 0;
+    const dataPlayer = DB_STORICO[pId]; // L'ID è ora la chiave diretta del DB
+    let html = `<div style="text-align:center; margin-bottom:15px;"><h3 style="margin:0; color:var(--accent);">${pName}</h3></div>`;
 
-        let html = `<div style="text-align:center; margin-bottom:15px;"><h3 style="margin:0; color:var(--accent);">${pName}</h3></div>`;
-
-        if (!dataPlayer) {
-            html += `<div class="status-badge status-new">NUOVO TARGET (Non a DB)</div>`;
+    if (!dataPlayer) {
+        html += `<div class="status-badge status-new">NUOVO TARGET (Non ancora a sistema)</div>`;
+    } else {
+        const ultimaMod = new Date(dataPlayer.ultima_modifica);
+        
+        // Usiamo direttamente lo stato calcolato da update_history.js
+        if (dataPlayer.inattivo === true) {
+            html += `<div class="status-badge status-inactive">🔴 INATTIVO (Nessun cambio da >24h)</div>`;
         } else {
-            const ultimaMod = new Date(dataPlayer.ultima_modifica);
-            const oreDiff = Math.floor((new Date() - ultimaMod) / 36e5);
-            
-            if (currentPts !== 0 && dataPlayer.dati.pts !== currentPts) {
-                html += `<div class="status-badge status-active">🟢 ATTIVO ORA (Cambio Punti)</div>`;
-            } else if (oreDiff < 24) {
-                html += `<div class="status-badge status-active">🟢 ATTIVO (${oreDiff}h fa)</div>`;
-            } else {
-                html += `<div class="status-badge status-inactive">🔴 INATTIVO (${Math.floor(oreDiff/24)}gg)</div>`;
-            }
-            html += `<div class="info-row"><span>Ultimo check DB:</span> <span class="val">${ultimaMod.toLocaleDateString()}</span></div>`;
+            html += `<div class="status-badge status-active">🟢 ATTIVO (Rilevata attività recente)</div>`;
         }
-        resArea.innerHTML = html;
-        document.getElementById('card-risultati').style.display = 'block';
+        
+        html += `<div class="info-row"><span>Ultima attività rilevata:</span> <span class="val">${ultimaMod.toLocaleString()}</span></div>`;
+        html += `<div class="info-row"><span>Punti registrati:</span> <span class="val">${dataPlayer.punti || dataPlayer.dati?.pts || 0}</span></div>`;
     }
+    resArea.innerHTML = html;
+    document.getElementById('card-risultati').style.display = 'block';
+}
 
     async function caricaDatabase(pWorld) {
         if (MONDO_CARICATO !== pWorld) {
